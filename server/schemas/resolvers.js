@@ -1,5 +1,5 @@
 const { AuthenticationError } = require('apollo-server-express');
-const { User, Book } = require('../models');
+const { User } = require('../models');
 const { signToken } = require('../utils/auth');
 
 const resolvers = {
@@ -20,30 +20,41 @@ const resolvers = {
       return { token, user };
     },
     login: async (parent, { email, password }) => {
+      console.log(email, password)
       const user = await User.findOne({ email });
 
       if (!user) {
         throw new AuthenticationError('No profile with this email found!');
       }
 
-      const correctPw = await profile.isCorrectPassword(password);
+      const correctPw = await user.isCorrectPassword(password);
 
       if (!correctPw) {
         throw new AuthenticationError('Incorrect password!');
       }
 
       const token = signToken(user);
+      console.log(token, user);
       return { token, user };
     },
 
     // Add a third argument to the resolver to access data in our `context`
-    saveBook: async (parent, { bookId, authors, description, title, image, link }, context) => {
+    saveBook: async (parent, { input }, context) => {
       // If context has a `user` property, that means the user executing this mutation has a valid JWT and is logged in
-      if (context.book) {
-        return Book.findOneAndUpdate(
-          { _id: bookId },
+      if (context.user) {
+        return User.findOneAndUpdate(
+          { _id: context.user._id },
           {
-            $addToSet: { books: book },
+            $addToSet: { 
+              savedBooks: {
+                authors: input.authors,
+                description: input.description,
+                bookId: input.bookId,
+                image: input.image,
+                link: input.link,
+                title: input.title,
+              }
+             },
           },
           {
             new: true,
@@ -57,10 +68,10 @@ const resolvers = {
 
     // Make it so a logged in user can only remove a skill from their own profile
     removeBook: async (parent, { bookId }, context) => {
-      if (context.book) {
-        return Book.findOneAndUpdate(
+      if (context.user) {
+        return User.findOneAndUpdate(
           { _id: context.user._id },
-          { $pull: { books: book } },
+          { $pull: { savedBooks: { bookId } } },
           { new: true }
         );
       }
